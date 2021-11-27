@@ -3,6 +3,8 @@
 archivemail - archive and compress old mail in your mailbox
 -----------------------------------------------------------
 
+Now available in Python 3!
+
 OVERVIEW:
 
 archivemail is a tool written in python(1) for archiving and compressing old
@@ -50,14 +52,11 @@ archivemail to make it quiet, only printing messages if something went wrong.
 Check out the 'examples' directory for an example shell script to be run from
 cron.
 
-The archivemail website is at: http://archivemail.sourceforge.net/
 
-If you have any feedback or bug reports about archivemail, you are very
-welcome to email the maintainers; as of November 2006, these are:
+CREDITS:
 
-Nikolaus Schulz <microschulz@web.de>
-Peter Poeml <poeml@suse.de>
+Paul Rodger <paul at paulrodger dot com>, archivemail author
 
+The original archivemail website is at: http://archivemail.sourceforge.net/
 
--- Paul Rodger <paul at paulrodger dot com>, archivemail author
-   Updated by: Nikolaus Schulz, maintainer
+This Python3 fork is maintained by cecilkorik on GitHub.

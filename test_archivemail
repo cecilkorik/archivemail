@@ -36,10 +36,10 @@ def check_python_version():
     try: 
         version = sys.version_info  # we might not even have this function! :)
         if (version[0] < 2) or (version[0] == 2 and version[1] < 4):
-            print too_old_error
+            print(too_old_error)
             sys.exit(1)
     except AttributeError:
-        print too_old_error
+        print(too_old_error)
         sys.exit(1)
 
 # define & run this early because 'unittest' requires Python >= 2.1
@@ -56,8 +56,8 @@ import tempfile
 import time
 import unittest
 import gzip
-import cStringIO
-import rfc822
+import io
+import email
 import mailbox
 
 from types import ModuleType
@@ -65,10 +65,10 @@ archivemail = ModuleType("archivemail")
 try:
     module_fp = open("archivemail", "r")
 except IOError:
-    print "The archivemail script should be in the current directory in order"
-    print "to be imported and tested. Sorry."
+    print("The archivemail script should be in the current directory in order")
+    print("to be imported and tested. Sorry.")
     sys.exit(1)
-exec module_fp in archivemail.__dict__
+exec(compile(module_fp.read(), "archivemail", "exec"), archivemail.__dict__)
 
 # We want to iterate over messages in a compressed archive mbox and verify
 # them.  This involves seeking in the mbox.  The gzip.Gzipfile.seek() in
@@ -123,7 +123,7 @@ class IndexedMailboxDir:
         """Add the given message to the index, for later random access."""
         # Extract the message-id as index key
         msg_id = None
-        fp = cStringIO.StringIO(msg_text)
+        fp = io.StringIO(msg_text)
         while True:
             line = fp.readline()
             # line empty means we didn't find a message-id
@@ -132,12 +132,12 @@ class IndexedMailboxDir:
                 msg_id = line.split(":", 1)[-1].strip()
                 assert msg_id
                 break
-        assert not self.msg_id_dict.has_key(msg_id)
+        assert msg_id not in self.msg_id_dict
         self.msg_id_dict[msg_id] = fpath
 
     def get_all_filenames(self):
         """Return all relative pathnames of files in this mailbox."""
-        return self.msg_id_dict.values()
+        return list(self.msg_id_dict.values())
 
 class SimpleMaildir(IndexedMailboxDir):
     """Primitive Maildir class, just good enough for generating short-lived
@@ -247,12 +247,12 @@ class TestMboxDotlock(TestCaseInTempdir):
         """A dotlock should silently be omitted upon EACCES."""
         archivemail.options.quiet = True
         mbox_dir = os.path.dirname(self.mbox_name)
-        os.chmod(mbox_dir, 0500)
+        os.chmod(mbox_dir, 0o500)
         try:
             self.mbox._dotlock_lock()
             self.mbox._dotlock_unlock()
         finally:
-            os.chmod(mbox_dir, 0700)
+            os.chmod(mbox_dir, 0o700)
             archivemail.options.quiet = False
 
 class TestMboxPosixLock(TestCaseInTempdir):
@@ -308,16 +308,16 @@ class TestMboxNext(TestCaseInTempdir):
     def testNextEmpty(self):
         """mbox.next() should return None on an empty mailbox"""
         mbox = archivemail.Mbox(self.empty_name)
-        msg = mbox.next()
+        msg = next(mbox)
         self.assertEqual(msg, None)
 
     def testNextNotEmpty(self):
         """mbox.next() should a message on a populated mailbox"""
         mbox = archivemail.Mbox(self.not_empty_name)
         for count in range(18):
-            msg = mbox.next()
+            msg = next(mbox)
             assert msg
-        msg = mbox.next()
+        msg = next(mbox)
         self.assertEqual(msg, None)
 
 
@@ -334,7 +334,7 @@ class TestTempMboxWrite(TestCaseInTempdir):
         mbox_write = archivemail.TempMbox()
         write_file = mbox_write.mbox_file_name
         for count in range(3):
-            msg = mbox_read.next()
+            msg = next(mbox_read)
             mbox_write.write(msg)
         mbox_read.close()
         mbox_write.close()
@@ -646,9 +646,9 @@ class TestIMAPQuoting(unittest.TestCase):
 
 class TestModUTF7(unittest.TestCase):
     goodpairs = (
-            (u"A\N{NOT IDENTICAL TO}A.", "A&ImI-A."),
-            (u"Hi Mom -\N{WHITE SMILING FACE}-!", "Hi Mom -&Jjo--!"),
-            (u"~peter/mail/\u53f0\u5317/\u65e5\u672c\u8a9e",
+            ("A\N{NOT IDENTICAL TO}A.", "A&ImI-A."),
+            ("Hi Mom -\N{WHITE SMILING FACE}-!", "Hi Mom -&Jjo--!"),
+            ("~peter/mail/\u53f0\u5317/\u65e5\u672c\u8a9e",
                 "~peter/mail/&U,BTFw-/&ZeVnLIqe-")
     )
 
@@ -1240,8 +1240,8 @@ class TestArchiveSize(unittest.TestCase):
         archivemail.options.quiet = True
         msg_text = make_message(hours_old=24*181)
         self.msg_size = len(msg_text)
-        fp = cStringIO.StringIO(msg_text)
-        self.msg = rfc822.Message(fp)
+        fp = io.StringIO(msg_text)
+        self.msg = email.Message(fp)
 
     def testSmaller(self):
         """giving a size argument smaller than the message"""
@@ -1358,7 +1358,7 @@ class TestArchiveMailboxdir(TestCaseInTempdir):
                 fp_archive = open(new_archive, "r")
             else:
                 fp_archive = FixedGzipFile(new_archive, "r")
-            mb = mailbox.UnixMailbox(fp_archive)
+            mb = mailbox.mbox(fp_archive)
             found = 0
             for msg in mb:
                 self.verify_maildir_has_msg(self.orig_maildir_obj, msg)
@@ -1373,15 +1373,14 @@ class TestArchiveMailboxdir(TestCaseInTempdir):
                 fp_archive.close()
 
     def verify_maildir_has_msg(self, maildir, msg):
-        """Assert that the given maildir has a copy of the rfc822 message."""
+        """Assert that the given maildir has a copy of the email message."""
         mid = msg['Message-Id'] # Complains if there is no message-id
         mdir_msg_str, mdir_flags = \
             maildir.get_message_and_mbox_status(mid)
         mbox_flags = set(msg.get('status', '') + msg.get('x-status', ''))
         self.assertEqual(mdir_flags, mbox_flags)
 
-        headers = filter(lambda h: msg.isheader(h) not in ('status', 'x-status'),
-                msg.headers)
+        headers = [h for h in msg.headers if msg.isheader(h) not in ('status', 'x-status')]
         headers = "".join(headers)
         msg.rewindbody()
         # Discard last mbox LF which is not part of the message.
@@ -1480,7 +1479,7 @@ class TestMaildirPreserveUnread(TestCaseInTempdir):
         msg = make_message(hours_old=24*181)
         smd.write(msg, new=False, flags='S')
         md = mailbox.Maildir(smd.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert archivemail.should_archive(msg_obj)
 
     def testOldUnread(self):
@@ -1489,7 +1488,7 @@ class TestMaildirPreserveUnread(TestCaseInTempdir):
         msg = make_message(hours_old=24*181)
         smd.write(msg, new=False)
         md = mailbox.Maildir(smd.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert not archivemail.should_archive(msg_obj)
 
     def tearDown(self):
@@ -1507,14 +1506,14 @@ class TestMaildirAll(TestArchiveMailboxdir):
         """New maildir messages should be archived with --all"""
         self.add_messages(hours_old=24*181)
         md = mailbox.Maildir(self.orig_maildir_obj.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert archivemail.should_archive(msg_obj)
 
     def testOld(self):
         """Old maildir messages should be archived with --all"""
         self.add_messages(hours_old=24*179)
         md = mailbox.Maildir(self.orig_maildir_obj.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert archivemail.should_archive(msg_obj)
 
     def tearDown(self):
@@ -1598,7 +1597,7 @@ class TestArchiveMaildirFlagged(TestCaseInTempdir):
         msg = make_message(hours_old=24*181)
         smd.write(msg, new=False, flags='F')
         md = mailbox.Maildir(smd.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert not archivemail.should_archive(msg_obj)
 
     def testIncludeFlaggedNew(self):
@@ -1607,7 +1606,7 @@ class TestArchiveMaildirFlagged(TestCaseInTempdir):
         msg = make_message(hours_old=24*179)
         smd.write(msg, new=False, flags='F')
         md = mailbox.Maildir(smd.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert not archivemail.should_archive(msg_obj)
 
     def testIncludeFlaggedOld(self):
@@ -1617,7 +1616,7 @@ class TestArchiveMaildirFlagged(TestCaseInTempdir):
         msg = make_message(hours_old=24*181)
         smd.write(msg, new=False, flags='F')
         md = mailbox.Maildir(smd.root)
-        msg_obj = md.next()
+        msg_obj = next(md)
         assert archivemail.should_archive(msg_obj)
 
     def tearDown(self):
@@ -1635,7 +1634,7 @@ class TestArchiveMaildirSize(TestCaseInTempdir):
         smd = SimpleMaildir("orig")
         smd.write(msg, new=False)
         md = mailbox.Maildir(smd.root)
-        self.msg_obj = md.next()
+        self.msg_obj = next(md)
 
     def testSmaller(self):
         """giving a size argument smaller than the maildir message"""
@@ -1659,32 +1658,32 @@ def make_message(body=None, default_headers={}, hours_old=None, mkfrom=False, wa
     if not headers:
         headers = {}
     headers['Message-Id'] = make_msgid()
-    if not headers.has_key('Date'):
+    if 'Date' not in headers:
         time_message = time.time() - (60 * 60 * hours_old)
         headers['Date'] = time.asctime(time.localtime(time_message))
-    if not headers.has_key('From'):
+    if 'From' not in headers:
         headers['From'] = "sender@dummy.domain"        
-    if not headers.has_key('To'):
+    if 'To' not in headers:
         headers['To'] = "receipient@dummy.domain"        
-    if not headers.has_key('Subject'):
+    if 'Subject' not in headers:
         headers['Subject'] = "This is the subject"
-    if mkfrom and not headers.has_key('From_'):
+    if mkfrom and 'From_' not in headers:
         headers['From_'] = "%s %s" % (headers['From'], headers['Date'])
     if not body:
         body = "This is the message body"
 
     msg = ""
-    if headers.has_key('From_'):
+    if 'From_' in headers:
         msg = msg + ("From %s\n" % headers['From_'])
         del headers['From_']
-    for key in headers.keys():
+    for key in list(headers.keys()):
         if headers[key] is not None:
             msg = msg + ("%s: %s\n" % (key, headers[key]))
     msg = msg + "\n\n" + body + "\n\n"
     if not wantobj:
         return msg
-    fp = cStringIO.StringIO(msg)
-    return rfc822.Message(fp)
+    fp = io.StringIO(msg)
+    return email.Message(fp)
 
 def append_file(source, dest):
     """appends the file named 'source' to the file named 'dest'"""
